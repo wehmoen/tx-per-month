@@ -126,11 +126,11 @@ async fn main() {
 
                     let tx = tx.unwrap();
 
-                    if wallets.contains(&tx.from) {
+                    if !wallets.contains(&tx.from) {
                         wallets.push(tx.from)
                     }
 
-                    if wallets.contains(&tx.to) {
+                    if !wallets.contains(&tx.to) {
                         wallets.push(tx.to)
                     }
 
