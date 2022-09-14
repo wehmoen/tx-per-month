@@ -3,7 +3,18 @@ use thousands::Separable;
 use chrono::Datelike;
 use futures::stream::StreamExt;
 use mongodb::bson::{DateTime, doc};
+use mongodb::options::FindOptions;
+use ferris_says::*;
+use std::io::{ stdout, BufWriter };
 use serde::{Deserialize, Serialize};
+
+fn welcome(years: &Vec<Year>) {
+    let stdout = stdout();
+    let greeting = format!("Ronin Chain Statistic Generator\nYears: {}", years.clone().iter().map(|y| y.to_string()).collect::<Vec<String>>().join(","));
+    let mut writer = BufWriter::new(stdout.lock());
+    say(greeting.as_bytes(), 64, &mut writer).unwrap();
+
+}
 
 type Year = i64;
 
@@ -60,6 +71,17 @@ async fn main() {
 
     let months: Vec<i64> = (1..=12).collect();
 
+    let options = FindOptions::builder()
+        .no_cursor_timeout(Some(true))
+        .batch_size(Some(1000u32))
+        .sort(doc! {
+                "created_at": 1i64
+            })
+        .build();
+
+
+    welcome(&years);
+
     for year in years {
         let mut this_year = create_ronin_chain_statistics();
         for month in months.iter() {
@@ -96,7 +118,7 @@ async fn main() {
 
                 ]
 
-                }, None).await.unwrap();
+                }, options.clone()).await.unwrap();
 
                 while let Some(tx) = cursor.next().await {
 
