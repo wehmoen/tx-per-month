@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use mongodb::bson::{DateTime, doc};
 use serde::{Deserialize, Serialize};
+use chrono::Datelike;
 
 type Year = i64;
 
@@ -15,15 +16,25 @@ struct RoninTransaction {
     created_at: DateTime,
 }
 
+fn get_current_year_month() -> (i64,i64) {
+    let current_date = chrono::Utc::now();
+    let year = current_date.year();
+    let month = current_date.month();
+    (year.into(), month.into())
+}
+
 #[tokio::main]
 async fn main() {
+
+    let now = get_current_year_month();
+
     let client = mongodb::Client::with_uri_str("mongodb://localhost:27017").await.expect("Failed to create database connection!");
     let database = client.database("ronin");
     let collection = database.collection::<RoninTransaction>("transactions");
 
     let mut statistics: HashMap<Year, RoninChainStatistics> = HashMap::new();
 
-    let years: [Year; 3] = [2020, 2021, 2022];
+    let years: Vec<Year> = (2021..=now.0).collect();
 
     let months: Vec<i64> = (1..=12).collect();
 
@@ -33,7 +44,10 @@ async fn main() {
             println!("Year: {:<5}Month: {:<2}", year, month);
             let index = (month - 1) as usize;
 
-            let res = collection.count_documents(doc! {
+            if year == now.0 && month >= &now.1 {
+                this_year[index] = 0;
+            } else {
+                let res = collection.count_documents(doc! {
                "$and": [
                     {
                         "$expr": {
@@ -60,7 +74,10 @@ async fn main() {
 
             }, None).await.unwrap();
 
-            this_year[index] = res as i64;
+                this_year[index] = res as i64;
+            }
+
+
         }
 
         statistics.insert(year, this_year);
