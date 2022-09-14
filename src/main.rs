@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 fn welcome(years: &Vec<Year>) {
     let stdout = stdout();
-    let greeting = format!("Ronin Chain Statistic Generator\nYears: {}", years.clone().iter().map(|y| y.to_string()).collect::<Vec<String>>().join(","));
+    let greeting = format!("Ronin Chain Statistic Generator\nYears: {}\nDeveloper: wehmoen", years.clone().iter().map(|y| y.to_string()).collect::<Vec<String>>().join(","));
     let mut writer = BufWriter::new(stdout.lock());
     say(greeting.as_bytes(), 64, &mut writer).unwrap();
 
