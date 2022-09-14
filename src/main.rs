@@ -1,22 +1,45 @@
 use std::collections::HashMap;
+use thousands::Separable;
+use chrono::Datelike;
+use futures::stream::StreamExt;
 use mongodb::bson::{DateTime, doc};
 use serde::{Deserialize, Serialize};
-use chrono::Datelike;
 
 type Year = i64;
 
-type RoninChainStatistics = [i64; 12];
+#[derive(Default, Serialize, Deserialize)]
+struct MonthlyStatistics {
+    transactions: i64,
+    active_wallets: i64,
+}
 
-fn create_ronin_chain_statistics() -> RoninChainStatistics {
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+type AnnualStatistics = [MonthlyStatistics; 12];
+
+fn create_ronin_chain_statistics() -> AnnualStatistics {
+    [
+        MonthlyStatistics::default(),
+        MonthlyStatistics::default(),
+        MonthlyStatistics::default(),
+        MonthlyStatistics::default(),
+        MonthlyStatistics::default(),
+        MonthlyStatistics::default(),
+        MonthlyStatistics::default(),
+        MonthlyStatistics::default(),
+        MonthlyStatistics::default(),
+        MonthlyStatistics::default(),
+        MonthlyStatistics::default(),
+        MonthlyStatistics::default()
+    ]
 }
 
 #[derive(Serialize, Deserialize)]
 struct RoninTransaction {
+    from: String,
+    to: String,
     created_at: DateTime,
 }
 
-fn get_current_year_month() -> (i64,i64) {
+fn get_current_year_month() -> (i64, i64) {
     let current_date = chrono::Utc::now();
     let year = current_date.year();
     let month = current_date.month();
@@ -25,14 +48,13 @@ fn get_current_year_month() -> (i64,i64) {
 
 #[tokio::main]
 async fn main() {
-
     let now = get_current_year_month();
 
     let client = mongodb::Client::with_uri_str("mongodb://localhost:27017").await.expect("Failed to create database connection!");
     let database = client.database("ronin");
     let collection = database.collection::<RoninTransaction>("transactions");
 
-    let mut statistics: HashMap<Year, RoninChainStatistics> = HashMap::new();
+    let mut statistics: HashMap<Year, AnnualStatistics> = HashMap::new();
 
     let years: Vec<Year> = (2021..=now.0).collect();
 
@@ -41,13 +63,15 @@ async fn main() {
     for year in years {
         let mut this_year = create_ronin_chain_statistics();
         for month in months.iter() {
-            println!("Year: {:<5}Month: {:<2}", year, month);
             let index = (month - 1) as usize;
 
+            let mut tx_count: i64 = 0;
+            let mut wallets: Vec<String> = vec![];
+
             if year == now.0 && month >= &now.1 {
-                this_year[index] = 0;
+                this_year[index] = MonthlyStatistics::default();
             } else {
-                let res = collection.count_documents(doc! {
+                let mut cursor = collection.find(doc! {
                "$and": [
                     {
                         "$expr": {
@@ -72,12 +96,30 @@ async fn main() {
 
                 ]
 
-            }, None).await.unwrap();
+                }, None).await.unwrap();
 
-                this_year[index] = res as i64;
+                while let Some(tx) = cursor.next().await {
+
+                    tx_count += 1;
+
+                    let tx = tx.unwrap();
+
+                    if wallets.contains(&tx.from) {
+                        wallets.push(tx.from)
+                    }
+
+                    if wallets.contains(&tx.to) {
+                        wallets.push(tx.to)
+                    }
+
+                    println!("Year: {:<5}Month: {:<2}\tTransactions: {:<12}Wallts: {:<9}", year, month, tx_count.separate_with_commas(), wallets.len().separate_with_commas());
+                }
+
+                this_year[index] = MonthlyStatistics {
+                    transactions: tx_count,
+                    active_wallets: wallets.len() as i64,
+                };
             }
-
-
         }
 
         statistics.insert(year, this_year);
